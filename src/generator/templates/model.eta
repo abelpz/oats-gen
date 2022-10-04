@@ -1,0 +1,36 @@
+<%
+  const { getRefTarget, getRefs, paramCase, safeType } = it.utils;
+  const { imports, ...model } = it.data;
+%>
+<% imports.forEach(({name,slug}) =>{ %>
+<% if(model.name !== name) { %>
+import {<%= name %>} from './<%= slug %>';
+<% } %>
+<% }); %>
+
+/**
+ * <%= model.description %>
+
+ * @export
+ * @<%= model.template %><% if(model.template === "type" ){ %> {<%= model.type %>}<% } %> <%= model.name %>
+
+ */
+
+export <%= model.template %> <%= model.name %>
+<% if(model.template === "type" ){ %> = <%= model.type %><% } %>
+<% if(model.template === "interface" ){ %>
+ {
+<% model.properties.forEach((property) => { %>
+  /**
+  * <%= property.description %>
+
+  * @type {<%= property.type %>}
+  * @memberof <%= model.name %>
+
+  */
+  <%= property.name %><% property.required ? "" : "?" %>: <%= property.type %>
+
+<% }); %>
+}
+<% } %>
+

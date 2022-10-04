@@ -1,0 +1,81 @@
+<%
+  const {data:operation, utils, global: globalData } = it
+  const {camelCase, paramCase, safeJs, getRefs, getRefTarget, safeType, getArrayType} = utils;
+  const { operationId, parameters, path, method, produces, consumes, summary, responses } = operation
+  const quote = (text, mark = '"') => `${mark}${text}${mark}`
+  const refs = getRefs(operation);
+  const successCode = Object.keys(responses).find((number) => parseInt(number) < 300 )
+  const response = getRefTarget(responses[successCode].$ref || "")
+
+  const formattedPath = parameters?.reduce((formattedPath, param) => {
+    if(param.in !== "path") return formattedPath;
+    return formattedPath.replaceAll(`{${param.name}}`, `\${${safeJs(camelCase(param.name))}}`)
+  }, path) || path.replaceAll("{", "${");
+%>
+import { baseParams, request } from "../utils"
+<% refs.forEach(ref => {%>
+<% const refName = getRefTarget(ref); %>
+import {<%= refName %>} from "../models/<%= paramCase(refName) %>"
+<% }); %>
+
+export interface <%= operationId %>Params extends baseParams {
+  <% parameters?.forEach( (param) => { %>
+    <% if (param.description) { %>/** <%= param.description %> */
+    <% } %>
+    <% if(param.in !== "body"){ %>
+      <%= safeJs(camelCase(param.name)) %><%= param.required ? "" : "?" %>: <%= param.type === "array" ? getArrayType(param) : safeType(param.type) %>;
+    <% } %>
+    <% if(param.in === "body"){ %>
+      <%= param.in %><% param.required ? "" : "?" %>: <%= param.schema.type || getRefTarget(param.schema?.$ref) %>;
+    <% } %>
+  <% }) %>
+}
+/**
+* <%= summary %>
+
+*/
+export default function <%= operationId %>({
+  <% parameters?.forEach( (param) => { %>
+    <% if(param.in !== "body"){ %>
+      <%= safeJs(camelCase(param.name)) %>,
+    <% } %>
+    <% if(param.in === "body"){ %>
+      <%= param.in%>,
+    <% } %>
+  <% }) %>
+  auth,
+  options
+}: <%= operationId %>Params)<%if(response){%>: Promise<<%= response %>>  <% }%> {
+  const requestParams = {
+    method: "<%= method.toUpperCase() %>",
+    basePath: options?.basePath,
+    path: `<%= formattedPath %>`,
+    query: { 
+      <% parameters?.forEach( (param) => { %>
+        <% if(param.in === "query"){ %>
+          "<%= param.name %>":<%= safeJs(camelCase(param.name)) %>, 
+        <% } %>
+      <%}) %>
+      ...options?.query
+    },
+    <% if(parameters) { %>
+      <% const body = parameters.find( (param) => param.in === "body" ) %>
+      <% const formData = parameters.filter( (param) => param.in === "formData" ) %>
+      <%= body ? (body.in + ",") : "" %>
+      <% if(formData.length){ %>
+      formData: {
+        <% formData.forEach(param => { %> 
+          "<%= param.name %>":<%= safeJs(camelCase(param.name)) %>, 
+        <% }); %>
+      },
+      <% } %>
+    <% } %>
+    auth,
+    headers: {
+      "content-type": "<%= consumes || globalData.consumes?.[0] %>",
+      accept: "<%= produces || globalData.produces?.[0] %>",
+      ...options?.headers,
+    },
+  };
+  return request(requestParams);
+}
